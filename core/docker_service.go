@@ -240,6 +240,12 @@ func NewDockerService(
 	// Register prometheus metrics.
 	metrics.Register()
 
+	ds.refreshPeriod = 30 * time.Second
+	ds.containerStats = make(map[string]*runtimeapi.ContainerStats)
+	ds.stats = make([]*runtimeapi.ContainerStats, 0)
+
+	go ds.refreshStats()
+
 	return ds, nil
 }
 
@@ -271,6 +277,12 @@ type dockerService struct {
 	// methods for more info).
 	containerCleanupInfos map[string]*containerCleanupInfo
 	cleanupInfosLock      sync.RWMutex
+
+	stats          []*runtimeapi.ContainerStats
+	containerStats map[string]*runtimeapi.ContainerStats
+	refreshPeriod  time.Duration
+	mutex          sync.Mutex
+	shutdown       chan struct{}
 }
 
 // Version returns the runtime name, runtime version and runtime API version

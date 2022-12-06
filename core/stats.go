@@ -19,16 +19,51 @@ package core
 import (
 	"context"
 	"github.com/sirupsen/logrus"
-	"sync"
+	"time"
 
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
+
+func (ds *dockerService) refreshStats() {
+	for {
+		select {
+		case <-ds.shutdown:
+			return
+		case <-time.After(ds.refreshPeriod):
+		}
+		ds.refresh()
+	}
+}
+
+func (ds *dockerService) refresh() {
+	filter := &runtimeapi.ContainerFilter{}
+	listResp, err := ds.ListContainers(context.TODO(), &runtimeapi.ListContainersRequest{Filter: filter})
+	if err != nil {
+		logrus.Errorf("Error listing containers with filter: %+v", filter)
+		logrus.Errorf("Error listing containers error: %s", err)
+	}
+	start := time.Now()
+	logrus.Infof("refresh() start %v", start.String())
+	stats1 := make([]*runtimeapi.ContainerStats, 0, len(listResp.Containers))
+	for _, container := range listResp.Containers {
+		if stats, err := ds.getContainerStats(container.Id); err == nil && stats != nil {
+			stats1 = append(stats1, stats)
+		} else {
+			logrus.Error(err, " Failed to get stats from container "+container.Id)
+		}
+	}
+	ds.mutex.Lock()
+	ds.stats = stats1
+	ds.mutex.Unlock()
+	logrus.Infof("refresh() end %v", time.Since(start).String())
+}
 
 // ContainerStats returns stats for a container stats request based on container id.
 func (ds *dockerService) ContainerStats(
 	_ context.Context,
 	r *runtimeapi.ContainerStatsRequest,
 ) (*runtimeapi.ContainerStatsResponse, error) {
+	logrus.Info("ContainerStats")
 	stats, err := ds.getContainerStats(r.ContainerId)
 	if err != nil {
 		return nil, err
@@ -50,31 +85,15 @@ func (ds *dockerService) ListContainerStats(
 		filter.LabelSelector = containerStatsFilter.LabelSelector
 	}
 
-	listResp, err := ds.ListContainers(ctx, &runtimeapi.ListContainersRequest{Filter: filter})
-	if err != nil {
-		logrus.Errorf("Error listing containers with filter: %+v", filter)
-		logrus.Errorf("Error listing containers error: %s", err)
-		return nil, err
-	}
+	logrus.Infof("rancher: ListContainerStats %v", filter)
 
-	var mtx sync.Mutex
-	var wg sync.WaitGroup
-	var stats = make([]*runtimeapi.ContainerStats, 0, len(listResp.Containers))
-	for _, container := range listResp.Containers {
-		container := container
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if containerStats, err := ds.getContainerStats(container.Id); err == nil && containerStats != nil {
-				mtx.Lock()
-				stats = append(stats, containerStats)
-				mtx.Unlock()
-			} else if err != nil {
-				logrus.Error(err, " Failed to get stats from container "+container.Id)
-			}
-		}()
-	}
-	wg.Wait()
+	start := time.Now()
+	ds.mutex.Lock()
+	defer ds.mutex.Unlock()
+	logrus.Infof("ListContainerStats start() %v", start.String())
 
+	stats := ds.stats
+
+	logrus.Infof("ListContainerStats end() %v", time.Since(start).String())
 	return &runtimeapi.ListContainerStatsResponse{Stats: stats}, nil
 }
