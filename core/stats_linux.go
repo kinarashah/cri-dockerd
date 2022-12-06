@@ -21,12 +21,27 @@ package core
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
 
+var containerCache = map[string]*Cache{}
+var mtx sync.Mutex
+
+type Cache struct {
+	Info    *runtimeapi.ContainerStats
+	LastSet time.Time
+}
+
 func (ds *dockerService) getContainerStats(containerID string) (*runtimeapi.ContainerStats, error) {
+	mtx.Lock()
+	if val, ok := containerCache[containerID]; ok && val.LastSet.Add(15*time.Second).Before(time.Now()) {
+		defer mtx.Unlock()
+		return val.Info, nil
+	}
+
 	info, err := ds.client.Info()
 	if err != nil {
 		return nil, err
@@ -78,5 +93,12 @@ func (ds *dockerService) getContainerStats(containerID string) (*runtimeapi.Cont
 			UsedBytes: &runtimeapi.UInt64Value{Value: uint64(*containerJSON.SizeRw)},
 		},
 	}
+
+	mtx.Lock()
+	containerCache[containerID] = &Cache{
+		Info:    containerStats,
+		LastSet: time.Now(),
+	}
+	mtx.Unlock()
 	return containerStats, nil
 }
