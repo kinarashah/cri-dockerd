@@ -37,10 +37,10 @@ func (ds *dockerService) getContainerStats(containerID string) (*runtimeapi.Cont
 		return nil, err
 	}
 
-	containerJSON, err := ds.client.InspectContainerWithSize(containerID)
-	if err != nil {
-		return nil, err
-	}
+	//containerJSON, err := ds.client.InspectContainerWithSize(containerID)
+	//if err != nil {
+	//	return nil, err
+	//}
 
 	statusResp, err := ds.ContainerStatus(
 		context.Background(),
@@ -75,7 +75,7 @@ func (ds *dockerService) getContainerStats(containerID string) (*runtimeapi.Cont
 		WritableLayer: &runtimeapi.FilesystemUsage{
 			Timestamp: timestamp,
 			FsId:      &runtimeapi.FilesystemIdentifier{Mountpoint: info.DockerRootDir},
-			UsedBytes: &runtimeapi.UInt64Value{Value: uint64(*containerJSON.SizeRw)},
+			//UsedBytes: &runtimeapi.UInt64Value{Value: uint64(*containerJSON.SizeRw)},
 		},
 	}
 	return containerStats, nil
