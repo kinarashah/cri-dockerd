@@ -19,7 +19,6 @@ package core
 import (
 	"context"
 	"github.com/sirupsen/logrus"
-	"sync"
 	"time"
 
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
@@ -46,23 +45,14 @@ func (ds *dockerService) refresh() {
 	start := time.Now()
 	logrus.Infof("dockerService: refresh() start: %v", start.String())
 	newStats := make(map[string]*runtimeapi.ContainerStats)
-	var mtx sync.Mutex
-	var wg sync.WaitGroup
+
 	for _, container := range listResp.Containers {
-		container := container
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if containerStats, err := ds.getContainerStats(container.Id); err == nil && containerStats != nil {
-				mtx.Lock()
-				newStats[container.Id] = containerStats
-				mtx.Unlock()
-			} else if err != nil {
-				logrus.Error(err, " Failed to get stats from container "+container.Id)
-			}
-		}()
+		if containerStats, err := ds.getContainerStats(container.Id); err == nil && containerStats != nil {
+			newStats[container.Id] = containerStats
+		} else if err != nil {
+			logrus.Error(err, " Failed to get stats from container "+container.Id)
+		}
 	}
-	wg.Wait()
 
 	ds.mutex.Lock()
 	ds.containerStats = newStats
