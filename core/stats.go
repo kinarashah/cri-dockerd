@@ -20,9 +20,55 @@ import (
 	"context"
 	"github.com/sirupsen/logrus"
 	"sync"
+	"time"
 
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
+
+func (ds *dockerService) refreshStats() {
+	for {
+		select {
+		case <-ds.shutdown:
+			return
+		case <-time.After(ds.refreshPeriod):
+		}
+		ds.refresh()
+	}
+}
+
+func (ds *dockerService) refresh() {
+	filter := &runtimeapi.ContainerFilter{}
+	listResp, err := ds.ListContainers(context.TODO(), &runtimeapi.ListContainersRequest{Filter: filter})
+	if err != nil {
+		logrus.Errorf("Error listing containers with filter: %+v", filter)
+		logrus.Errorf("Error listing containers error: %s", err)
+	}
+	start := time.Now()
+	logrus.Infof("dockerService: refresh() start: %v", start.String())
+	newStats := make(map[string]*runtimeapi.ContainerStats)
+	var mtx sync.Mutex
+	var wg sync.WaitGroup
+	for _, container := range listResp.Containers {
+		container := container
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if containerStats, err := ds.getContainerStats(container.Id); err == nil && containerStats != nil {
+				mtx.Lock()
+				newStats[container.Id] = containerStats
+				mtx.Unlock()
+			} else if err != nil {
+				logrus.Error(err, " Failed to get stats from container "+container.Id)
+			}
+		}()
+	}
+	wg.Wait()
+
+	ds.mutex.Lock()
+	ds.containerStats = newStats
+	ds.mutex.Unlock()
+	logrus.Infof("dockerService: refresh() end: %v", time.Since(start).Seconds())
+}
 
 // ContainerStats returns stats for a container stats request based on container id.
 func (ds *dockerService) ContainerStats(
@@ -57,24 +103,19 @@ func (ds *dockerService) ListContainerStats(
 		return nil, err
 	}
 
-	var mtx sync.Mutex
-	var wg sync.WaitGroup
+	start := time.Now()
+	logrus.Infof("listContainerStats start() %v", start.String())
 	var stats = make([]*runtimeapi.ContainerStats, 0, len(listResp.Containers))
-	for _, container := range listResp.Containers {
-		container := container
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if containerStats, err := ds.getContainerStats(container.Id); err == nil && containerStats != nil {
-				mtx.Lock()
-				stats = append(stats, containerStats)
-				mtx.Unlock()
-			} else if err != nil {
-				logrus.Error(err, " Failed to get stats from container "+container.Id)
-			}
-		}()
-	}
-	wg.Wait()
+	ds.mutex.Lock()
+	defer ds.mutex.Unlock()
 
+	for _, container := range listResp.Containers {
+		if st, ok := ds.containerStats[container.Id]; ok {
+			stats = append(stats, st)
+		} else {
+			logrus.Errorf("containerStats: missing stats for %v", container.Id)
+		}
+	}
+	logrus.Infof("listContainerStats end() %v", time.Since(start).Seconds())
 	return &runtimeapi.ListContainerStatsResponse{Stats: stats}, nil
 }
