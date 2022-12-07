@@ -44,18 +44,18 @@ func (ds *dockerService) refresh() {
 	}
 	start := time.Now()
 	logrus.Infof("dockerService: refresh() start: %v", start.String())
-	newStats := make(map[string]*runtimeapi.ContainerStats)
+	newStats := make([]*runtimeapi.ContainerStats, 0, len(listResp.Containers))
 
 	for _, container := range listResp.Containers {
 		if containerStats, err := ds.getContainerStats(container.Id); err == nil && containerStats != nil {
-			newStats[container.Id] = containerStats
+			newStats = append(newStats, containerStats)
 		} else if err != nil {
 			logrus.Error(err, " Failed to get stats from container "+container.Id)
 		}
 	}
 
 	ds.mutex.Lock()
-	ds.containerStats = newStats
+	ds.stats = newStats
 	ds.mutex.Unlock()
 	logrus.Infof("dockerService: refresh() end: %v", time.Since(start).Seconds())
 }
@@ -94,18 +94,12 @@ func (ds *dockerService) ListContainerStats(
 	}
 
 	start := time.Now()
-	logrus.Infof("listContainerStats start() %v", start.String())
-	var stats = make([]*runtimeapi.ContainerStats, 0, len(listResp.Containers))
+	logrus.Infof("listContainerStats start() %v %v", start.String(), len(listResp.Containers))
+
 	ds.mutex.Lock()
 	defer ds.mutex.Unlock()
+	stats := ds.stats
 
-	for _, container := range listResp.Containers {
-		if st, ok := ds.containerStats[container.Id]; ok {
-			stats = append(stats, st)
-		} else {
-			logrus.Errorf("containerStats: missing stats for %v", container.Id)
-		}
-	}
 	logrus.Infof("listContainerStats end() %v", time.Since(start).Seconds())
 	return &runtimeapi.ListContainerStatsResponse{Stats: stats}, nil
 }
