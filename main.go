@@ -18,6 +18,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/google/cadvisor/container"
+	"github.com/google/cadvisor/container/docker"
 	"math/rand"
 	"os"
 	"time"
@@ -25,11 +27,17 @@ import (
 	"github.com/Mirantis/cri-dockerd/pkg/app"
 	"k8s.io/apiserver/pkg/server"
 	"k8s.io/component-base/logs"
+
+	_ "github.com/google/cadvisor/container/docker/install"
 )
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
+	err := container.RegisterPlugin("docker", docker.NewPlugin())
+	if err != nil {
+		fmt.Println("kinara: RegisterPlugin", "docker")
+	}
 	command := app.NewDockerCRICommand(server.SetupSignalHandler())
 	logs.InitLogs()
 	defer logs.FlushLogs()
