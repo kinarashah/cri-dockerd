@@ -325,7 +325,8 @@ type dockerService struct {
 	containerCleanupInfos map[string]*containerCleanupInfo
 	cleanupInfosLock      sync.RWMutex
 
-	cadvisorClient1 *cadvisorClient
+	cadvisorClient1  *cadvisorClient
+	hoststatProvider HostStatsProvider
 }
 
 type cadvisorClient struct {

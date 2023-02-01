@@ -18,16 +18,16 @@ package app
 
 import (
 	"fmt"
-	"net/url"
+	"github.com/Mirantis/cri-dockerd/dockershim"
+	dockerremote "github.com/Mirantis/cri-dockerd/dockershim/remote"
 	"github.com/Mirantis/cri-dockerd/pkg/app/options"
 	"k8s.io/component-base/cli/flag"
+	utilflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/version/verflag"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 	"k8s.io/klog"
-	"github.com/Mirantis/cri-dockerd/dockershim"
-	dockerremote "github.com/Mirantis/cri-dockerd/dockershim/remote"
 	"k8s.io/kubernetes/pkg/kubelet/cri/streaming"
-	utilflag "k8s.io/component-base/cli/flag"
+	"net/url"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -116,13 +116,13 @@ func RunDockershim(f *options.DockerCRIFlags, stopCh <-chan struct{}) error {
 
 	// Initialize network plugin settings.
 	pluginSettings := dockershim.NetworkPluginSettings{
-		HairpinMode:       "none",
+		HairpinMode:        "none",
 		PluginName:         f.NetworkPluginName,
 		PluginConfDir:      f.CNIConfDir,
 		PluginBinDirString: f.CNIBinDir,
 		PluginCacheDir:     f.CNICacheDir,
 		MTU:                int(f.NetworkPluginMTU),
-		NonMasqueradeCIDR: f.NonMasqueradeCIDR,
+		NonMasqueradeCIDR:  f.NonMasqueradeCIDR,
 	}
 
 	// Initialize streaming configuration. (Not using TLS now)
@@ -144,11 +144,11 @@ func RunDockershim(f *options.DockerCRIFlags, stopCh <-chan struct{}) error {
 
 	if _, err := ds.UpdateRuntimeConfig(nil, &runtimeapi.UpdateRuntimeConfigRequest{
 		RuntimeConfig: &runtimeapi.RuntimeConfig{
-			NetworkConfig: &runtimeapi.NetworkConfig {
+			NetworkConfig: &runtimeapi.NetworkConfig{
 				PodCidr: f.PodCIDR,
 			},
 		},
-	}) ; err != nil {
+	}); err != nil {
 		return err
 	}
 
