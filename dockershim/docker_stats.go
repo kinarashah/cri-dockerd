@@ -177,10 +177,18 @@ func (ds *dockerService) ListContainerStats(ctx context.Context, r *runtimeapi.L
 		//}
 	}
 
-	var stats1 []*runtimeapi.ContainerStats
-	return &runtimeapi.ListContainerStatsResponse{Stats: stats1}, nil
-
 	var stats []*runtimeapi.ContainerStats
+	for _, res := range result {
+		for _, cc := range res.Containers {
+			fmt.Println(cc)
+			stats = append(stats, &runtimeapi.ContainerStats{})
+		}
+	}
+
+	//var stats1 []*runtimeapi.ContainerStats
+	return &runtimeapi.ListContainerStatsResponse{Stats: stats}, nil
+
+	//var stats []*runtimeapi.ContainerStats
 
 	containerStatsFilter := r.GetFilter()
 	filter := &runtimeapi.ContainerFilter{}

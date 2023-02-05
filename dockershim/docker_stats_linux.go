@@ -31,6 +31,8 @@ func (ds *dockerService) getContainerStats(containerID string) (*runtimeapi.Cont
 		return nil, err
 	}
 
+	stats, err := ds.dclient.ContainerStats(context.Background(), containerID, false)
+	
 	statsJSON, err := ds.client.GetContainerStats(containerID)
 	if err != nil {
 		return nil, err

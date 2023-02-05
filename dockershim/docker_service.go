@@ -22,6 +22,7 @@ package dockershim
 import (
 	"context"
 	"fmt"
+	dockerapi "github.com/docker/docker/client"
 	"github.com/google/cadvisor/events"
 	"github.com/google/cadvisor/manager"
 	"net/http"
@@ -196,6 +197,14 @@ func NewDockerClientFromConfig(config *ClientConfig) libdocker.Interface {
 	return nil
 }
 
+func dockerClient(dockerEndpoint string) (*dockerapi.Client, error) {
+	if len(dockerEndpoint) > 0 {
+		klog.Infof("Connecting to docker on %s", dockerEndpoint)
+		return dockerapi.NewClientWithOpts(dockerapi.WithHost(dockerEndpoint), dockerapi.WithVersion(""))
+	}
+	return dockerapi.NewClientWithOpts(dockerapi.FromEnv)
+}
+
 // NewDockerService creates a new `DockerService` struct.
 // NOTE: Anything passed to DockerService should be eventually handled in another way when we switch to running the shim as a different process.
 func NewDockerService(config *ClientConfig, podSandboxImage string, streamingConfig *streaming.Config, pluginSettings *NetworkPluginSettings,
@@ -205,12 +214,14 @@ func NewDockerService(config *ClientConfig, podSandboxImage string, streamingCon
 
 	c := libdocker.NewInstrumentedInterface(client)
 
+	dent, err := dockerClient(config.DockerEndpoint)
 	checkpointManager, err := checkpointmanager.NewCheckpointManager(filepath.Join(dockershimRootDir, sandboxCheckpointDir))
 	if err != nil {
 		return nil, err
 	}
 
 	ds := &dockerService{
+		dclient:         dent,
 		client:          c,
 		os:              kubecontainer.RealOS{},
 		podSandboxImage: podSandboxImage,
@@ -297,6 +308,7 @@ func NewDockerService(config *ClientConfig, podSandboxImage string, streamingCon
 }
 
 type dockerService struct {
+	dclient          *dockerapi.Client
 	client           libdocker.Interface
 	os               kubecontainer.OSInterface
 	podSandboxImage  string
