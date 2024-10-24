@@ -42,8 +42,9 @@ type cstats struct {
 
 type containerStatsCache struct {
 	sync.RWMutex
-	stats map[string]*cstats
-	clist chan []*runtimeapi.Container
+	stats            map[string]*cstats
+	clist            chan []*runtimeapi.Container
+	totalrwLayerSize uint64
 }
 
 func newCstats(cid string, ds *dockerService) *cstats {
@@ -85,6 +86,9 @@ func (cs *cstats) startCollect() {
 		} else {
 			cs.Lock()
 			cs.rwLayerSize = uint64(*containerJSON.SizeRw)
+			cs.ds.containerStatsCache.Lock()
+			cs.ds.containerStatsCache.totalrwLayerSize += cs.rwLayerSize
+			cs.ds.containerStatsCache.Unlock()
 			cs.initialized = true
 			cs.Unlock()
 			backoffDuration = minCollectInterval
@@ -122,6 +126,12 @@ func (c *containerStatsCache) getStats(containerID string) *cstats {
 		return nil
 	}
 	return c.stats[containerID]
+}
+
+func (c *containerStatsCache) getTotalRWLayerSize() uint64 {
+	c.Lock()
+	defer c.Unlock()
+	return c.totalrwLayerSize
 }
 
 func (ds *dockerService) startStatsCollection() {
