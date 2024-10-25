@@ -115,6 +115,16 @@ func (cs *cstats) getContainerRWSize() uint64 {
 	return cs.rwLayerSize
 }
 
+func (c *containerStatsCache) getWriteableLayer() uint64 {
+	c.RLock()
+	defer c.RUnlock()
+	var totalLayerSize uint64
+	for _, stats := range c.stats {
+		totalLayerSize += stats.rwLayerSize
+	}
+	return totalLayerSize
+}
+
 func (c *containerStatsCache) getStats(containerID string) *cstats {
 	c.RLock()
 	defer c.RUnlock()
